@@ -1,0 +1,48 @@
+name: Numbers4 毎日自動更新
+
+on:
+  schedule:
+    # 月〜金 19:15 JST (= 10:15 UTC) に実行
+    # ナンバーズの抽選は 18:45 JST なので約30分後
+    - cron: "15 10 * * 1-5"
+
+  # 手動実行ボタンも用意（テスト・緊急更新用）
+  workflow_dispatch:
+
+permissions:
+  contents: write   # data.json をコミット・プッシュするために必要
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. リポジトリをチェックアウト ──────────────────
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      # ── 2. Python セットアップ ─────────────────────────
+      - name: Python 3.11 セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. 当選番号取得スクリプトを実行 ───────────────
+      - name: 当選番号を取得して data.json を更新
+        run: python fetch_result.py
+
+      # ── 4. 変更があればコミット＆プッシュ ─────────────
+      - name: 変更を確認してコミット
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # data.json に変更があった場合のみコミット
+          if git diff --quiet data.json; then
+            echo "data.json に変更なし。スキップ。"
+          else
+            git add data.json
+            git commit -m "🎯 Numbers4 データ自動更新 $(date '+%Y-%m-%d %H:%M JST' -d '+9 hours')"
+            git push
+            echo "✅ data.json をプッシュしました。"
+          fi

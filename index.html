@@ -177,6 +177,31 @@ html,body{
   padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.65;
   margin-top:10px;
 }
+
+/* ── RESULT CHECK ── */
+.rc{background:var(--sur);border-radius:var(--r);margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden}
+.rc-head{padding:10px 14px;border-bottom:.5px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.rc-round{font-size:13px;font-weight:700;color:var(--tx)}
+.rc-actual{font-size:20px;font-weight:800;letter-spacing:.1em;font-variant-numeric:tabular-nums}
+.rc-body{padding:8px 14px 12px}
+.rc-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:.5px solid var(--bd)}
+.rc-row:last-child{border-bottom:none}
+.rc-type{font-size:11px;font-weight:700;min-width:74px;color:var(--tx3);flex-shrink:0}
+.rc-pred{display:flex;gap:3px;flex:1}
+.rd{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;background:var(--bg);color:var(--tx)}
+.rd.hit{background:var(--teal-bg);color:var(--teal)}
+.rd.miss{background:var(--red-bg);color:var(--red)}
+.rc-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;flex-shrink:0;white-space:nowrap}
+.rb-win{background:var(--teal-bg);color:var(--teal)}
+.rb-near{background:var(--amber-bg);color:var(--amber)}
+.rb-miss{background:var(--bg);color:var(--tx3)}
+.rc-empty{text-align:center;padding:32px 16px;color:var(--tx3);font-size:14px;line-height:1.9}
+.rc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.rc-inp-row{display:flex;gap:8px;align-items:flex-end;margin-bottom:12px}
+.rc-inp-row .ig{flex:1}
+.rc-inp-row .btn{flex-shrink:0;width:auto;padding:11px 16px}
+.delrc{font-size:14px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:4px 6px;flex-shrink:0}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -255,6 +280,38 @@ html,body{
     </div>
   </div>
 
+  <!-- ═══ RESULT CHECK TAB ═══ -->
+  <div class="pane" id="pane-check">
+    <div class="card" id="rc-status-card" style="display:flex;align-items:center;gap:10px;padding:10px 14px">
+      <svg id="rc-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.5" style="flex-shrink:0;animation:spin 1s linear infinite">
+        <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0"/></svg>
+      <svg id="rc-ok" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.5" style="flex-shrink:0;display:none">
+        <path d="M9 11l3 3L22 4"/></svg>
+      <svg id="rc-err-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2.5" style="flex-shrink:0;display:none">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="rc-status-msg" style="font-size:13px;color:var(--tx2)">data.json を取得中...</span>
+    </div>
+
+    <div class="sec">成績サマリー</div>
+    <div class="rc-stats">
+      <div class="stat"><div class="stat-v" id="rc-total">—</div><div class="stat-l">照合済み</div></div>
+      <div class="stat"><div class="stat-v" style="color:var(--teal)" id="rc-wins">—</div><div class="stat-l">ボックス的中</div></div>
+      <div class="stat"><div class="stat-v" style="color:var(--amber)" id="rc-str-wins">—</div><div class="stat-l">ストレート的中</div></div>
+    </div>
+
+    <div class="sec" style="justify-content:space-between">
+      照合履歴
+      <button onclick="clearChecks()" style="font-size:11px;background:none;border:none;color:var(--tx3);cursor:pointer;padding:0">全削除</button>
+    </div>
+    <div id="rc-list">
+      <div class="rc-empty">
+        自動照合の準備中です…<br>
+        アプリを開くたびに data.json の当選番号と<br>保存済み予想を自動照合します。
+      </div>
+    </div>
+  </div>
+
 </div><!-- /content -->
 
 <nav class="nav">
@@ -277,6 +334,12 @@ html,body{
     </svg>
     履歴
   </button>
+  <button class="nb" id="nav-check" onclick="goTab('check')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+    </svg>
+    結果
+  </button>
 </nav>
 
 <script>
@@ -285,28 +348,26 @@ html,body{
 // ══════════════════════════════════════════
 //  DATA
 // ══════════════════════════════════════════
-const SKEY = 'n4pwa_v1';
-const MAX  = 20;
+const SKEY     = 'n4pwa_v2';      // data.json 対応のため新キー
+const SKEY_UPD = 'n4pwa_updated'; // data.json の最終更新日キャッシュ
+const MAX      = 20;
 
-const DEFAULTS = [
-  {round:6980, date:'05/11月', num:'8852'},
-  {round:6979, date:'05/08金', num:'1421'},
-  {round:6978, date:'05/07木', num:'1595'},
-  {round:6977, date:'05/06水', num:'5513'},
-  {round:6976, date:'05/05火', num:'9998'},
-  {round:6975, date:'05/04月', num:'3298'},
-  {round:6974, date:'05/01金', num:'9391'},
-  {round:6973, date:'04/30木', num:'8641'},
-  {round:6972, date:'04/29水', num:'0799'},
-  {round:6971, date:'04/28火', num:'9678'},
-];
-
-function load() {
+// ローカルストレージから手動追加分を読む
+function loadLocal() {
   try { const s = localStorage.getItem(SKEY); if (s) return JSON.parse(s); } catch(e){}
-  return DEFAULTS.map(r => ({...r}));
+  return [];
 }
 function save(r) {
   try { localStorage.setItem(SKEY, JSON.stringify(r)); } catch(e){}
+}
+
+// data.json とローカル手動追加分をマージ
+function mergeWithLocal(remote) {
+  const local = loadLocal();
+  const map = {};
+  remote.forEach(r => map[r.round] = r);
+  local.forEach(r => map[r.round] = r);   // 手動追加が優先
+  return Object.values(map).sort((a,b) => b.round - a.round).slice(0, MAX);
 }
 
 // ══════════════════════════════════════════
@@ -626,6 +687,219 @@ function renderHistory(results) {
 }
 
 // ══════════════════════════════════════════
+//  PREDICTION STORE  — 予想の自動保存・照合
+// ══════════════════════════════════════════
+const SKEY_PRED  = 'n4pwa_preds';   // 保存済み予想
+const SKEY_CHECK = 'n4pwa_checks';  // 照合結果
+
+function loadPreds()  { try { return JSON.parse(localStorage.getItem(SKEY_PRED)  || '{}'); } catch(e){ return {}; } }
+function loadChecks() { try { return JSON.parse(localStorage.getItem(SKEY_CHECK) || '[]'); } catch(e){ return []; } }
+function savePreds(p)  { try { localStorage.setItem(SKEY_PRED,  JSON.stringify(p)); } catch(e){} }
+function saveChecks(c) { try { localStorage.setItem(SKEY_CHECK, JSON.stringify(c)); } catch(e){} }
+
+/** 現在の予想（nextRound）をストアに保存する */
+function storePredictions(nextRound, boxPreds, strPreds) {
+  const store = loadPreds();
+  store[nextRound] = {
+    round:   nextRound,
+    savedAt: new Date().toISOString(),
+    box:     boxPreds.map(p => p.digs.slice()),
+    str:     strPreds.map(p => p.digs.slice()),
+  };
+  // 古いデータは30件まで保持
+  const keys = Object.keys(store).map(Number).sort((a,b) => b-a);
+  if (keys.length > 30) keys.slice(30).forEach(k => delete store[k]);
+  savePreds(store);
+}
+
+/* ── 照合ロジック ────────────────────────── */
+
+/** ボックス照合: 数字の集合が一致すればOK */
+function matchBox(predDigs, actualStr) {
+  const pred   = [...predDigs].sort().join('');
+  const actual = [...actualStr].sort().join('');
+  return pred === actual;
+}
+
+/** ストレート照合: 全桁完全一致 */
+function matchStr(predDigs, actualStr) {
+  return predDigs.join('') === actualStr;
+}
+
+/** 各桁ごとのヒット（ストレート用: 同位置一致） */
+function digitHits(predDigs, actualStr) {
+  return predDigs.map((d, i) => d === +actualStr[i]);
+}
+
+/** ボックス用: 数字が含まれているか（個数考慮） */
+function boxDigitHits(predDigs, actualStr) {
+  const actCnt = {};
+  [...actualStr].forEach(c => actCnt[c] = (actCnt[c]||0) + 1);
+  const used = {};
+  return predDigs.map(d => {
+    const k = String(d);
+    if ((actCnt[k]||0) > (used[k]||0)) { used[k]=(used[k]||0)+1; return true; }
+    return false;
+  });
+}
+
+/* ── render ─────────────────────────────── */
+function renderCheckStats(checks) {
+  const total   = checks.length;
+  const boxWins = checks.filter(c => c.boxHit).length;
+  const strWins = checks.filter(c => c.strHit).length;
+  document.getElementById('rc-total').textContent    = total  || '0';
+  document.getElementById('rc-wins').textContent     = boxWins|| '0';
+  document.getElementById('rc-str-wins').textContent = strWins|| '0';
+}
+
+function renderChecks(checks) {
+  renderCheckStats(checks);
+  const el = document.getElementById('rc-list');
+  if (!checks.length) {
+    el.innerHTML = '<div class="rc-empty">まだ照合データがありません。<br>上のフォームで当選番号を入力すると<br>その回の予想と自動で照合されます。</div>';
+    return;
+  }
+
+  el.innerHTML = [...checks].reverse().map((c, ci) => {
+    const actual  = c.actual;
+    const realIdx = checks.length - 1 - ci;  // 削除に使う元インデックス
+
+    // ── Box rows ──
+    const boxRows = (c.box || []).map((pred, pi) => {
+      const hits    = boxDigitHits(pred, actual);
+      const hitCnt  = hits.filter(Boolean).length;
+      const isWin   = matchBox(pred, actual);
+      const badge   = isWin
+        ? '<span class="rc-badge rb-win">✓ 当選</span>'
+        : `<span class="rc-badge ${hitCnt>=2?'rb-near':'rb-miss'}">${hitCnt}/4 一致</span>`;
+      const digH = pred.map((d,i) =>
+        `<div class="rd ${hits[i]?'hit':'miss'}">${d}</div>`).join('');
+      return `<div class="rc-row">
+        <span class="rc-type">ボックス${pi===0?'本命':'候補'+(pi+1)}</span>
+        <div class="rc-pred">${digH}</div>${badge}</div>`;
+    }).join('');
+
+    // ── Str rows ──
+    const posN = ['千','百','十','一'];
+    const strRows = (c.str || []).map((pred, pi) => {
+      const hits   = digitHits(pred, actual);
+      const hitCnt = hits.filter(Boolean).length;
+      const isWin  = matchStr(pred, actual);
+      const badge  = isWin
+        ? '<span class="rc-badge rb-win">✓ 当選</span>'
+        : `<span class="rc-badge ${hitCnt>=2?'rb-near':'rb-miss'}">${hitCnt}/4 一致</span>`;
+      const digH = pred.map((d,i) =>
+        `<div class="rd ${hits[i]?'hit':'miss'}" title="${posN[i]}の位">${d}</div>`).join('');
+      return `<div class="rc-row">
+        <span class="rc-type">ST${pi===0?'本命':'候補'+(pi+1)}</span>
+        <div class="rc-pred">${digH}</div>${badge}</div>`;
+    }).join('');
+
+    // ── Whole card ──
+    const anyWin  = c.boxHit || c.strHit;
+    const headCls = anyWin ? 'style="background:var(--teal-bg)"' : '';
+    return `<div class="rc" id="rcard-${realIdx}">
+      <div class="rc-head" ${headCls}>
+        <div>
+          <div class="rc-round">第${c.round}回 予想</div>
+          <div class="rc-actual">当選: ${actual}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${anyWin ? '<span class="rc-badge rb-win" style="font-size:13px">🎉 的中！</span>' : ''}
+          <button class="delrc" onclick="deleteCheck(${realIdx})" title="削除">✕</button>
+        </div>
+      </div>
+      <div class="rc-body">
+        ${boxRows}${strRows}
+        ${!c.hasPred ? '<div style="font-size:12px;color:var(--tx3);padding:6px 0">この回の保存済み予想が見つかりません（手動入力で追加）</div>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── user actions ───────────────────────── */
+/** data.json の results と保存済み予想を自動照合する */
+function autoReconcile(remoteResults, statusUpdated) {
+  const store  = loadPreds();
+  const checks = loadChecks();
+  const doneRounds = new Set(checks.map(c => c.round));
+
+  let newCount = 0;
+
+  remoteResults.forEach(r => {
+    const round  = r.round;
+    const actual = r.num;
+    if (doneRounds.has(round)) return;          // 照合済みはスキップ
+    if (!store[round]) return;                  // 予想がない回はスキップ
+
+    const pred    = store[round];
+    const boxPreds = pred.box || [];
+    const strPreds = pred.str || [];
+    const boxHit   = boxPreds.some(p => matchBox(p, actual));
+    const strHit   = strPreds.some(p => matchStr(p, actual));
+
+    checks.push({
+      round, actual,
+      box: boxPreds, str: strPreds,
+      hasPred: true, boxHit, strHit,
+      date: new Date().toISOString(),
+      auto: true,   // 自動照合フラグ
+    });
+    doneRounds.add(round);
+    newCount++;
+  });
+
+  if (newCount > 0) {
+    // 回号降順でソート
+    checks.sort((a, b) => b.round - a.round);
+    saveChecks(checks);
+  }
+
+  // ステータスバー更新
+  const spin    = document.getElementById('rc-spin');
+  const okIcon  = document.getElementById('rc-ok');
+  const errIcon = document.getElementById('rc-err-icon');
+  const msg     = document.getElementById('rc-status-msg');
+  if (spin && okIcon && msg) {
+    spin.style.display = 'none';
+    okIcon.style.display = 'block';
+    const txt = statusUpdated
+      ? `自動照合済み（データ更新: ${statusUpdated}）`
+      : '自動照合済み';
+    msg.textContent = newCount > 0
+      ? `${newCount}件を新たに自動照合しました ✓`
+      : txt;
+  }
+
+  renderChecks(checks);
+}
+
+function setRcStatusError(msg) {
+  const spin    = document.getElementById('rc-spin');
+  const errIcon = document.getElementById('rc-err-icon');
+  const msgEl   = document.getElementById('rc-status-msg');
+  if (!spin) return;
+  spin.style.display    = 'none';
+  if (errIcon) errIcon.style.display = 'block';
+  if (msgEl)   msgEl.textContent = msg;
+}
+
+function deleteCheck(i) {
+  if (!confirm('この照合結果を削除しますか？')) return;
+  const checks = loadChecks();
+  checks.splice(i, 1);
+  saveChecks(checks);
+  renderChecks(checks);
+}
+
+function clearChecks() {
+  if (!confirm('照合履歴をすべて削除しますか？')) return;
+  saveChecks([]);
+  renderChecks([]);
+}
+
+// ══════════════════════════════════════════
 //  APP STATE
 // ══════════════════════════════════════════
 let results = load();
@@ -639,9 +913,13 @@ function refresh() {
   const nextRound = results[0] ? results[0].round + 1 : '—';
   document.getElementById('hdr-s').textContent = `第${nextRound}回を予想中 ｜ 直近${results.length}回分析`;
 
-  renderPreds(genBox(an, results), genStr(an, results), an);
+  const _box = genBox(an, results);
+  const _str = genStr(an, results);
+  renderPreds(_box, _str, an);
   renderAnalysis(an);
   renderHistory(results);
+  // 予想をストアに自動保存
+  if (nextRound !== '—') storePredictions(nextRound, _box, _str);
 }
 
 // ══════════════════════════════════════════
@@ -677,6 +955,11 @@ function addResult() {
   const now = new Date();
   const dateStr = `${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}追加`;
   results.unshift({round, date:dateStr, num});
+
+  // 手動追加分をローカルに保存（data.json と分離管理）
+  const local = loadLocal();
+  local.unshift({round, date:dateStr, num});
+  save(local.slice(0, MAX));
   rEl.value=''; nEl.value='';
   refresh();
 
@@ -688,17 +971,16 @@ function addResult() {
 function delResult(i) {
   if (results.length <= 3) { alert('最低3件のデータが必要です'); return; }
   if (confirm(`第${results[i].round}回（${results[i].num}）を削除しますか？`)) {
+    const delRound = results[i].round;
     results.splice(i, 1);
+    // 手動追加リストからも削除
+    const local = loadLocal().filter(r => r.round !== delRound);
+    save(local);
     refresh();
   }
 }
 
-function resetData() {
-  if (confirm('デフォルトデータ（直近10回）に戻しますか？\n追加したデータは削除されます。')) {
-    results = DEFAULTS.map(r => ({...r}));
-    refresh();
-  }
-}
+
 
 function copyNum(num, btn) {
   const orig = btn.innerHTML;
@@ -726,9 +1008,70 @@ function fallback(num, btn, orig) {
 }
 
 // ══════════════════════════════════════════
-//  INIT
+//  INIT — data.json を fetch してから起動
 // ══════════════════════════════════════════
-refresh();
+async function initApp() {
+  // まずローカルだけで即起動（体感速度向上）
+  const local = loadLocal();
+  if (local.length) { results = local; refresh(); }
+
+  // data.json を取得（GitHub Pages 上で動く）
+  try {
+    const resp = await fetch('./data.json', {cache: 'no-cache'});
+    if (!resp.ok) throw new Error(resp.status);
+    const json = await resp.json();
+
+    // サーバーの更新日をキャッシュして表示
+    const updated = json.updated || '';
+    try { localStorage.setItem(SKEY_UPD, updated); } catch(e){}
+
+    const merged = mergeWithLocal(json.results || []);
+    results = merged;
+    refresh();
+
+    // ヘッダーに更新日を表示
+    if (updated) {
+      const sub = document.getElementById('hdr-s');
+      sub.textContent = sub.textContent + ` ｜ データ更新: ${updated}`;
+    }
+
+    // ── 当選番号と保存済み予想を自動照合 ──
+    autoReconcile(json.results || [], updated);
+
+  } catch(e) {
+    // ローカル環境 or オフライン → ローカルのみで動作
+    setRcStatusError('オフライン – 自動照合できません');
+    if (!local.length) {
+      // どちらもなければ最低限のハードコードデータ
+      results = [
+        {round:6980, date:'05/11月', num:'8852'},
+        {round:6979, date:'05/08金', num:'1421'},
+        {round:6978, date:'05/07木', num:'1595'},
+        {round:6977, date:'05/06水', num:'5513'},
+        {round:6976, date:'05/05火', num:'9998'},
+        {round:6975, date:'05/04月', num:'3298'},
+        {round:6974, date:'05/01金', num:'9391'},
+        {round:6973, date:'04/30木', num:'8641'},
+        {round:6972, date:'04/29水', num:'0799'},
+        {round:6971, date:'04/28火', num:'9678'},
+      ];
+      refresh();
+    }
+    console.warn('data.json 取得失敗（ローカルモードで動作中）:', e.message);
+  }
+}
+
+// resetData は data.json を再取得してリセット
+async function resetData() {
+  if (!confirm('データをリセットしますか？\n手動追加したデータは削除されます。')) return;
+  try { localStorage.removeItem(SKEY); } catch(e){}
+  await initApp();
+}
+
+// 照合タブの初期描画（autoReconcile前のプレビュー）
+renderChecks(loadChecks());
+
+initApp();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
