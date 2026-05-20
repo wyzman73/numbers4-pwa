@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Numbers4 予想ツール</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F6E56">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="N4予想">
+<style>
+:root{
+  --teal:#0F6E56;--teal-l:#1D9E75;--teal-bg:#E1F5EE;
+  --amber:#BA7517;--amber-bg:#FAEEDA;
+  --red:#A32D2D;--red-bg:#FCEBEB;
+  --blue:#185FA5;--blue-bg:#E6F1FB;
+  --tx:#2C2C2A;--tx2:#5F5E5A;--tx3:#888780;
+  --bd:rgba(44,44,42,0.12);--bg:#F1EFE8;--sur:#fff;
+  --r:14px;--rs:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;
+  color:var(--tx);background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+.hdr{background:var(--teal);color:#fff;flex-shrink:0;
+  padding:calc(env(safe-area-inset-top,0px)+12px) 16px 12px}
+.hdr-t{font-size:18px;font-weight:700}
+.hdr-s{font-size:13px;opacity:.75;margin-top:3px}
+.content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.nav{display:flex;background:var(--sur);border-top:.5px solid var(--bd);flex-shrink:0;
+  padding-bottom:env(safe-area-inset-bottom,0px)}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:8px 0;border:none;background:none;color:var(--tx3);font-size:10px;gap:3px;cursor:pointer}
+.nb.on{color:var(--teal)}
+.nb svg{width:22px;height:22px;stroke-width:1.8}
+.pane{display:none;padding:14px 16px 32px}
+.pane.on{display:block}
+.card{background:var(--sur);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.sec{font-size:12px;font-weight:700;color:var(--tx3);margin:0 0 8px;
+  display:flex;align-items:center;gap:6px}
+.pc{background:var(--sur);border-radius:var(--r);margin-bottom:10px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden}
+.pc-top{padding:10px 14px 9px;border-bottom:.5px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between}
+.pc-lbl{font-size:11px;font-weight:700;color:var(--tx2)}
+.pc-stars{color:#BA7517;font-size:15px}
+.pc-body{padding:12px 14px 11px}
+.pos-row{display:flex;gap:6px;margin-bottom:4px}
+.pl{flex:1;text-align:center;font-size:10px;font-weight:700;color:var(--tx3)}
+.digits{display:flex;gap:6px;margin-bottom:9px}
+.dig{flex:1;height:54px;border-radius:10px;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  font-size:30px;font-weight:900;color:var(--tx)}
+.dig.hot{background:var(--teal-bg);color:var(--teal)}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px}
+.tag{font-size:11px;padding:2px 9px;border-radius:99px;background:var(--bg);color:var(--tx2)}
+.tag.g{background:var(--teal-bg);color:var(--teal)}
+.tag.b{background:var(--blue-bg);color:var(--blue)}
+.cp-btn{width:100%;padding:9px;border-radius:var(--rs);border:none;background:var(--bg);
+  color:var(--tx2);font-size:13px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;gap:8px}
+.cp-btn:active{background:var(--teal-bg);color:var(--teal)}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.stat{background:var(--sur);border-radius:12px;padding:10px 6px;text-align:center;
+  box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.stat-v{font-size:24px;font-weight:800}
+.stat-l{font-size:10px;color:var(--tx3);margin-top:2px}
+.hgrid{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-bottom:14px}
+.hc{border-radius:6px;padding:4px 2px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;min-height:40px}
+.hc-d{font-size:12px;font-weight:700}
+.hc-n{font-size:9px;opacity:.72;margin-top:1px}
+.hlbl{font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:5px}
+.br{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.br-l{font-size:12px;color:var(--tx2);min-width:72px}
+.br-t{flex:1;height:18px;background:var(--bg);border-radius:99px;overflow:hidden}
+.br-f{height:100%;border-radius:99px;background:var(--teal)}
+.br-v{font-size:11px;font-weight:600;color:var(--tx2);min-width:50px;text-align:right}
+.inp-row{display:flex;gap:10px;margin-bottom:12px}
+.ig{flex:1}
+.ig label{font-size:11px;color:var(--tx3);display:block;margin-bottom:4px}
+.ig input{width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:10px;
+  font-size:16px;background:var(--sur);color:var(--tx);outline:none;-webkit-appearance:none}
+.ig input:focus{border-color:var(--teal-l)}
+.btn{display:block;width:100%;padding:13px;border:none;border-radius:10px;
+  font-size:15px;font-weight:700;cursor:pointer}
+.btn-p{background:var(--teal);color:#fff}
+.btn-s{background:var(--bg);color:var(--tx2)}
+.err{font-size:12px;color:var(--red);margin-top:6px;display:none}
+.err.on{display:block}
+.hr-row{display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:.5px solid var(--bd)}
+.hr-row:last-child{border-bottom:none}
+.hr-info{display:flex;gap:10px;align-items:baseline}
+.hr-rnd{font-size:11px;color:var(--tx3)}
+.hr-dt{font-size:11px;color:var(--tx3)}
+.hr-num{font-size:20px;font-weight:800;letter-spacing:.08em}
+.del{font-size:18px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:6px 10px}
+.warn{background:var(--amber-bg);border-radius:10px;
+  padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.65;margin-top:10px}
+.rc{background:var(--sur);border-radius:var(--r);margin-bottom:12px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden}
+.rc-head{padding:10px 14px;border-bottom:.5px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px}
+.rc-round{font-size:13px;font-weight:700}
+.rc-actual{font-size:20px;font-weight:800;letter-spacing:.1em}
+.rc-body{padding:8px 14px 12px}
+.rc-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:.5px solid var(--bd)}
+.rc-row:last-child{border-bottom:none}
+.rc-type{font-size:11px;font-weight:700;min-width:74px;color:var(--tx3);flex-shrink:0}
+.rc-pred{display:flex;gap:3px;flex:1}
+.rd{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;font-size:14px;font-weight:700;background:var(--bg);color:var(--tx)}
+.rd.hit{background:var(--teal-bg);color:var(--teal)}
+.rd.miss{background:var(--red-bg);color:var(--red)}
+.rc-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;flex-shrink:0;white-space:nowrap}
+.rb-win{background:var(--teal-bg);color:var(--teal)}
+.rb-near{background:var(--amber-bg);color:var(--amber)}
+.rb-miss{background:var(--bg);color:var(--tx3)}
+.rc-empty{text-align:center;padding:32px 16px;color:var(--tx3);font-size:14px;line-height:1.9}
+.rc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.delrc{font-size:14px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:4px 8px}
+.sbar{display:flex;align-items:center;gap:10px;background:var(--sur);border-radius:var(--r);
+  padding:10px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.sbar span{font-size:13px;color:var(--tx2)}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.spinning{animation:spin 1s linear infinite}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-t">Numbers4 予想ツール</div>
+  <div class="hdr-s" id="hdr-s">読み込み中...</div>
+</header>
+
+<div class="content" id="content">
+
+  <!-- 予想 -->
+  <div class="pane on" id="pane-predict">
+    <div class="sec">ボックス予想（5点）</div>
+    <div id="box-preds"></div>
+    <div class="sec" style="margin-top:4px">ストレート予想（3点）</div>
+    <div id="str-preds"></div>
+    <div class="warn">⚠️ 統計的傾向に基づく参考情報です。ナンバーズは完全ランダム抽選です。</div>
+  </div>
+
+  <!-- 分析 -->
+  <div class="pane" id="pane-analysis">
+    <div class="sec">統計サマリー</div>
+    <div class="stats-row" id="stats-row"></div>
+    <div class="sec">桁別ホットマップ</div>
+    <div class="card" id="heat-card"></div>
+    <div class="sec">奇偶パターン</div>
+    <div class="card" id="oe-card"></div>
+    <div class="sec">構成タイプ</div>
+    <div class="card" id="type-card"></div>
+  </div>
+
+  <!-- 履歴 -->
+  <div class="pane" id="pane-history">
+    <div class="sec">データを追加</div>
+    <div class="card">
+      <div class="inp-row">
+        <div class="ig"><label>回号</label>
+          <input type="number" id="inp-r" placeholder="例: 6981" inputmode="numeric"></div>
+        <div class="ig"><label>当選番号（4桁）</label>
+          <input type="text" id="inp-n" placeholder="例: 3456" inputmode="numeric" maxlength="4"></div>
+      </div>
+      <button class="btn btn-p" id="add-btn" onclick="addResult()">追加して予想を更新</button>
+      <div class="err" id="inp-err"></div>
+    </div>
+    <div class="sec">データ一覧（<span id="data-cnt">—</span>件）</div>
+    <div class="card" style="padding:4px 16px" id="hist-list"></div>
+    <div style="margin-top:10px">
+      <button class="btn btn-s" onclick="resetData()">リセット</button>
+    </div>
+  </div>
+
+  <!-- 結果 -->
+  <div class="pane" id="pane-check">
+    <div class="sbar" id="sbar">
+      <svg id="sbar-icon" class="spinning" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="var(--teal)" stroke-width="2.5" style="flex-shrink:0">
+        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+      </svg>
+      <span id="sbar-msg">データ取得中...</span>
+    </div>
+    <div class="sec">成績サマリー</div>
+    <div class="rc-stats">
+      <div class="stat"><div class="stat-v" id="rc-total">0</div><div class="stat-l">照合済み</div></div>
+      <div class="stat"><div class="stat-v" style="color:var(--teal)" id="rc-wins">0</div><div class="stat-l">BOX的中</div></div>
+      <div class="stat"><div class="stat-v" style="color:var(--amber)" id="rc-str">0</div><div class="stat-l">ST的中</div></div>
+    </div>
+    <div class="sec" style="justify-content:space-between">
+      照合履歴
+      <button onclick="clearChecks()" style="font-size:11px;background:none;border:none;color:var(--tx3);cursor:pointer">全削除</button>
+    </div>
+    <div id="rc-list">
+      <div class="rc-empty">まだ照合データがありません。<br>アプリを開くたびに自動照合します。</div>
+    </div>
+  </div>
+
+</div>
+
+<nav class="nav">
+  <button class="nb on" id="nav-predict" onclick="goTab('predict')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>予想
+  </button>
+  <button class="nb" id="nav-analysis" onclick="goTab('analysis')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>分析
+  </button>
+  <button class="nb" id="nav-history" onclick="goTab('history')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>履歴
+  </button>
+  <button class="nb" id="nav-check" onclick="goTab('check')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>結果
+  </button>
+</nav>
+
+<script>
+'use strict';
+const SK_LOCAL  = 'n4_local';
+const SK_PRED   = 'n4_preds';
+const SK_CHECK  = 'n4_checks';
+const MAX = 100;
+
+const FALLBACK = [
+  {round:6980,date:'05/11',num:'8852'},{round:6979,date:'05/08',num:'1421'},
+  {round:6978,date:'05/07',num:'1595'},{round:6977,date:'05/06',num:'5513'},
+  {round:6976,date:'05/05',num:'9998'},{round:6975,date:'05/04',num:'3298'},
+  {round:6974,date:'05/01',num:'9391'},{round:6973,date:'04/30',num:'8641'},
+  {round:6972,date:'04/29',num:'0799'},{round:6971,date:'04/28',num:'9678'},
+];
+
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
+function loadLocal() {return lsGet(SK_LOCAL,[]);}
+function loadPreds() {return lsGet(SK_PRED,{});}
+function loadChecks(){return lsGet(SK_CHECK,[]);}
+
+let results=[];
+
+function merge(remote,local){
+  const m={};
+  remote.forEach(r=>m[r.round]=r);
+  local.forEach(r=>m[r.round]=r);
+  return Object.values(m).sort((a,b)=>b.round-a.round).slice(0,MAX);
+}
+
+// ── 分析 ──────────────────────────────
+function analyze(data){
+  const n=data.length;
+  const pf=[0,1,2,3].map(()=>Array(10).fill(0));
+  const tot=Array(10).fill(0);
+  data.forEach(r=>r.num.split('').forEach((c,i)=>{pf[i][+c]++;tot[+c]++;}));
+  const sums=data.map(r=>r.num.split('').reduce((s,c)=>s+ +c,0));
+  const avgSum=sums.reduce((a,b)=>a+b,0)/n;
+  const rank=[...Array(10).keys()].sort((a,b)=>tot[b]-tot[a]);
+  const oe={};
+  data.forEach(r=>{const odd=r.num.split('').filter(c=>+c%2!==0).length;const k=`奇${odd}偶${4-odd}`;oe[k]=(oe[k]||0)+1;});
+  const types={バラ:0,ワンペア:0,ツーペア:0,スリーカード:0,ゾロ目:0};
+  data.forEach(r=>{const u=new Set(r.num).size;if(u===4)types.バラ++;else if(u===3)types.ワンペア++;else if(u===2){const cnt={};r.num.split('').forEach(c=>cnt[c]=(cnt[c]||0)+1);Math.max(...Object.values(cnt))===3?types.スリーカード++:types.ツーペア++;}else types.ゾロ目++;});
+  return{pf,tot,avgSum,hot:rank.slice(0,4),cold:rank.slice(7),oe,types,n};
+}
+
+// ── 予想エンジン ───────────────────────
+function scoreBox(digs,an,rBoxSets){
+  const{tot,avgSum,cold}=an;let s=0;
+  const sum=digs.reduce((a,b)=>a+b,0);
+  const odd=digs.filter(d=>d%2!==0).length;
+  const uniq=new Set(digs).size;
+  const key=[...digs].sort((a,b)=>a-b).join('');
+  s+=Math.max(0,6-Math.abs(sum-Math.round(avgSum)));
+  if(odd===2)s+=4;else if(odd===3)s+=3;else if(odd===1)s+=2;else s+=1;
+  if(uniq===4)s+=4;else if(uniq===3)s+=2;
+  digs.forEach(d=>s+=tot[d]*0.35);
+  digs.forEach(d=>{if(cold.includes(d))s-=1.5;});
+  if(!rBoxSets.has(key))s+=3;
+  if(digs.includes(0))s-=2;
+  if(sum<10||sum>30)s-=3;
+  return s;
+}
+
+function genBox(an,data){
+  const{tot}=an;
+  const rBoxSets=new Set(data.slice(0,5).map(r=>[...r.num].map(Number).sort((a,b)=>a-b).join('')));
+  const top8=[...Array(10).keys()].sort((a,b)=>tot[b]-tot[a]).slice(0,8);
+  const top7=top8.slice(0,7);
+  const cands=[];
+  for(let a=0;a<top8.length;a++)for(let b=a+1;b<top8.length;b++)for(let c=b+1;c<top8.length;c++)for(let d=c+1;d<top8.length;d++){
+    const digs=[top8[a],top8[b],top8[c],top8[d]];cands.push({digs,s:scoreBox(digs,an,rBoxSets)});}
+  for(let p=0;p<top7.length;p++)for(let a=0;a<top7.length;a++){if(a===p)continue;
+    for(let b=a+1;b<top7.length;b++){if(b===p)continue;
+      const digs=[top7[p],top7[p],top7[a],top7[b]];cands.push({digs,s:scoreBox(digs,an,rBoxSets)});}}
+  cands.sort((a,b)=>b.s-a.s);
+  const seen=new Set();const top=[];
+  for(const c of cands){const k=[...c.digs].sort((a,b)=>a-b).join('');if(!seen.has(k)){seen.add(k);top.push(c);if(top.length>=5)break;}}
+  const stars=['★★★','★★','★★','★','★'];
+  return top.map((c,i)=>{const digs=[...c.digs].sort((a,b)=>a-b);return{digs,sum:digs.reduce((a,b)=>a+b,0),odd:digs.filter(d=>d%2!==0).length,uniq:new Set(digs).size,stars:stars[i]};});
+}
+
+function genStr(an,data){
+  const{pf,avgSum}=an;
+  const pRank=pf.map(f=>[...Array(10).keys()].sort((a,b)=>f[b]-f[a]));
+  const rNums=new Set(data.slice(0,5).map(r=>r.num));
+  function score(digs){let s=0;const sum=digs.reduce((a,b)=>a+b,0);digs.forEach((d,i)=>s+=pf[i][d]*2);s+=Math.max(0,6-Math.abs(sum-Math.round(avgSum)));const odd=digs.filter(d=>d%2!==0).length;if(odd===2)s+=3;else if(odd===3)s+=2;if(!rNums.has(digs.join('')))s+=2;return s;}
+  const cands=[];
+  for(let a=0;a<3;a++)for(let b=0;b<3;b++)for(let c=0;c<3;c++)for(let d=0;d<3;d++){const digs=[pRank[0][a],pRank[1][b],pRank[2][c],pRank[3][d]];cands.push({digs,s:score(digs)});}
+  cands.sort((a,b)=>b.s-a.s);
+  const seen=new Set();const top=[];
+  for(const c of cands){const k=c.digs.join('');if(!seen.has(k)){seen.add(k);top.push(c);if(top.length>=3)break;}}
+  const stars=['★★★','★★','★'];
+  return top.map((c,i)=>({digs:c.digs,sum:c.digs.reduce((a,b)=>a+b,0),odd:c.digs.filter(d=>d%2!==0).length,stars:stars[i]}));
+}
+
+// ── 描画 ──────────────────────────────
+function heatSt(n,max){
+  if(!n||!max)return{bg:'#F1EFE8',fg:'#888780'};
+  const t=n/max;
+  const bgs=['#E1F5EE','#9FE1CB','#5DCAA5','#1D9E75','#0F6E56'];
+  const fgs=['#085041','#085041','#04342C','#E1F5EE','#E1F5EE'];
+  const i=Math.min(Math.floor(t*bgs.length),bgs.length-1);
+  return{bg:bgs[i],fg:fgs[i]};
+}
+
+function cpBtn(num,label){
+  return `<button class="cp-btn" onclick="copyNum('${num}',this)">${label}</button>`;
+}
+
+function renderPreds(box,str,an){
+  const posN=['千','百','十','一'];
+  document.getElementById('box-preds').innerHTML=box.map((p,i)=>{
+    const lbl=i===0?'ボックス 本命':`ボックス 候補${i+1}`;
+    const dh=p.digs.map(d=>`<div class="dig${an.hot.includes(d)?' hot':''}">${d}</div>`).join('');
+    return`<div class="pc"><div class="pc-top"><span class="pc-lbl">${lbl}</span><span class="pc-stars">${p.stars}</span></div><div class="pc-body"><div class="digits">${dh}</div><div class="tags"><span class="tag g">和${p.sum}</span><span class="tag">奇${p.odd}偶${4-p.odd}</span><span class="tag">${p.uniq===4?'バラ':'ワンペア'}</span></div>${cpBtn(p.digs.join(''),'コピー')}</div></div>`;
+  }).join('');
+  document.getElementById('str-preds').innerHTML=str.map((p,i)=>{
+    const lbl=i===0?'ストレート 本命':`ストレート 候補${i+1}`;
+    const plH=posN.map(n=>`<div class="pl">${n}</div>`).join('');
+    const dh=p.digs.map((d,pi)=>{const f=an.pf[pi];const mf=Math.max(...f);const cls=(f[d]>=mf*0.6&&f[d]>0)?' hot':'';return`<div class="dig${cls}">${d}</div>`;}).join('');
+    return`<div class="pc"><div class="pc-top"><span class="pc-lbl">${lbl}</span><span class="pc-stars">${p.stars}</span></div><div class="pc-body"><div class="pos-row">${plH}</div><div class="digits">${dh}</div><div class="tags"><span class="tag g">和${p.sum}</span><span class="tag">奇${p.odd}偶${4-p.odd}</span><span class="tag b">順番固定</span></div>${cpBtn(p.digs.join(''),'コピー（千百十一）')}</div></div>`;
+  }).join('');
+}
+
+function renderAnalysis(an){
+  const{tot,avgSum,pf,oe,types,n,hot,cold}=an;
+  document.getElementById('stats-row').innerHTML=`
+    <div class="stat"><div class="stat-v" style="color:var(--teal)">${avgSum.toFixed(1)}</div><div class="stat-l">平均和</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--amber)">${hot[0]}</div><div class="stat-l">最ホット</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--red)">${cold[cold.length-1]}</div><div class="stat-l">最コールド</div></div>`;
+  const posNm=['千の位','百の位','十の位','一の位'];
+  let h='';
+  const maxT=Math.max(...tot,1);
+  h+=`<p class="hlbl">全桁合計（${n*4}桁中）</p><div class="hgrid" style="margin-bottom:16px">`;
+  for(let d=0;d<10;d++){const st=heatSt(tot[d],maxT);h+=`<div class="hc" style="background:${st.bg};color:${st.fg}"><span class="hc-d">${d}</span><span class="hc-n">${tot[d]}</span></div>`;}
+  h+='</div>';
+  pf.forEach((freq,pi)=>{const mf=Math.max(...freq,1);h+=`<p class="hlbl">${posNm[pi]}</p><div class="hgrid" style="margin-bottom:${pi<3?16:0}px">`;for(let d=0;d<10;d++){const st=heatSt(freq[d],mf);h+=`<div class="hc" style="background:${st.bg};color:${st.fg}"><span class="hc-d">${d}</span><span class="hc-n">${freq[d]}</span></div>`;}h+='</div>';});
+  document.getElementById('heat-card').innerHTML=h;
+  const oeOrd=['奇4偶0','奇3偶1','奇2偶2','奇1偶3','奇0偶4'];
+  document.getElementById('oe-card').innerHTML=oeOrd.map(k=>{const cnt=oe[k]||0,pct=Math.round(cnt/n*100);return`<div class="br"><span class="br-l">${k}</span><div class="br-t"><div class="br-f" style="width:${pct}%"></div></div><span class="br-v">${cnt}回 ${pct}%</span></div>`;}).join('');
+  const tyOrd=['バラ','ワンペア','ツーペア','スリーカード','ゾロ目'];
+  document.getElementById('type-card').innerHTML=tyOrd.map(k=>{const cnt=types[k]||0,pct=Math.round(cnt/n*100);return`<div class="br"><span class="br-l">${k}</span><div class="br-t"><div class="br-f" style="width:${pct}%"></div></div><span class="br-v">${cnt}回 ${pct}%</span></div>`;}).join('');
+}
+
+function renderHistory(data){
+  document.getElementById('data-cnt').textContent=data.length;
+  document.getElementById('hist-list').innerHTML=data.map((r,i)=>`
+    <div class="hr-row"><div class="hr-info"><span class="hr-rnd">第${r.round}回</span><span class="hr-dt">${r.date}</span><span class="hr-num">${r.num}</span></div><button class="del" onclick="delResult(${i})">✕</button></div>`).join('');
+}
+
+// ── 結果照合 ───────────────────────────
+function matchBox(pred,actual){return[...pred].sort().join('')===[...actual].sort().join('');}
+function matchStr(pred,actual){return pred.join('')===actual;}
+function boxHits(pred,actual){const ac={};[...actual].forEach(c=>ac[c]=(ac[c]||0)+1);const u={};return pred.map(d=>{const k=String(d);if((ac[k]||0)>(u[k]||0)){u[k]=(u[k]||0)+1;return true;}return false;});}
+function strHits(pred,actual){return pred.map((d,i)=>d===+actual[i]);}
+
+function setStatus(msg,done,err){
+  const ic=document.getElementById('sbar-icon');
+  const ms=document.getElementById('sbar-msg');
+  if(ic){ic.classList.toggle('spinning',!done&&!err);ic.setAttribute('stroke',err?'var(--amber)':'var(--teal)');}
+  if(ms)ms.textContent=msg;
+}
+
+function autoReconcile(remote,updated){
+  const store=loadPreds();const checks=loadChecks();
+  const done=new Set(checks.map(c=>c.round));let newN=0;
+  remote.forEach(r=>{
+    if(done.has(r.round)||!store[r.round])return;
+    const pred=store[r.round];const box=pred.box||[];const str=pred.str||[];
+    checks.push({round:r.round,actual:r.num,box,str,boxHit:box.some(p=>matchBox(p,r.num)),strHit:str.some(p=>matchStr(p,r.num)),auto:true,date:new Date().toISOString()});
+    done.add(r.round);newN++;
+  });
+  if(newN>0){checks.sort((a,b)=>b.round-a.round);lsSet(SK_CHECK,checks);}
+  const lbl=updated?` (${updated})`:'';
+  setStatus(newN>0?`${newN}件を自動照合しました ✓`:`最新データで照合済み${lbl}`,true,false);
+  renderChecks(checks);
+}
+
+function renderChecks(checks){
+  const total=checks.length,bw=checks.filter(c=>c.boxHit).length,sw=checks.filter(c=>c.strHit).length;
+  document.getElementById('rc-total').textContent=total;
+  document.getElementById('rc-wins').textContent=bw;
+  document.getElementById('rc-str').textContent=sw;
+  const el=document.getElementById('rc-list');
+  if(!checks.length){el.innerHTML='<div class="rc-empty">まだ照合データがありません。<br>アプリを開くたびに自動照合されます。</div>';return;}
+  const posN=['千','百','十','一'];
+  el.innerHTML=[...checks].reverse().map((c,ci)=>{
+    const ri=checks.length-1-ci;const actual=c.actual;
+    const boxRows=(c.box||[]).map((pred,pi)=>{const hits=boxHits(pred,actual);const cnt=hits.filter(Boolean).length;const isWin=matchBox(pred,actual);const badge=isWin?'<span class="rc-badge rb-win">✓ 当選</span>':`<span class="rc-badge ${cnt>=2?'rb-near':'rb-miss'}">${cnt}/4</span>`;const dh=pred.map((d,i)=>`<div class="rd ${hits[i]?'hit':'miss'}">${d}</div>`).join('');return`<div class="rc-row"><span class="rc-type">BOX ${pi===0?'本命':'候補'+(pi+1)}</span><div class="rc-pred">${dh}</div>${badge}</div>`;}).join('');
+    const strRows=(c.str||[]).map((pred,pi)=>{const hits=strHits(pred,actual);const cnt=hits.filter(Boolean).length;const isWin=matchStr(pred,actual);const badge=isWin?'<span class="rc-badge rb-win">✓ 当選</span>':`<span class="rc-badge ${cnt>=2?'rb-near':'rb-miss'}">${cnt}/4</span>`;const dh=pred.map((d,i)=>`<div class="rd ${hits[i]?'hit':'miss'}" title="${posN[i]}">${d}</div>`).join('');return`<div class="rc-row"><span class="rc-type">ST ${pi===0?'本命':'候補'+(pi+1)}</span><div class="rc-pred">${dh}</div>${badge}</div>`;}).join('');
+    const anyWin=c.boxHit||c.strHit;
+    return`<div class="rc"><div class="rc-head" ${anyWin?'style="background:var(--teal-bg)"':''}><div><div class="rc-round">第${c.round}回${c.auto?' 🤖':''}</div><div class="rc-actual">当選:${actual}</div></div><div style="display:flex;align-items:center;gap:6px">${anyWin?'<span class="rc-badge rb-win">🎉 的中！</span>':''}<button class="delrc" onclick="deleteCheck(${ri})">✕</button></div></div><div class="rc-body">${boxRows}${strRows}</div></div>`;
+  }).join('');
+}
+
+// ── refresh ────────────────────────────
+function refresh(){
+  results.sort((a,b)=>b.round-a.round);
+  if(results.length>MAX)results=results.slice(0,MAX);
+  const an=analyze(results);
+  const nextRound=results[0]?results[0].round+1:null;
+  document.getElementById('hdr-s').textContent=nextRound?`第${nextRound}回を予想中 ｜ ${results.length}件で分析`:'読み込み中...';
+  const box=genBox(an,results);const str=genStr(an,results);
+  renderPreds(box,str,an);renderAnalysis(an);renderHistory(results);
+  if(nextRound){
+    const store=loadPreds();
+    store[nextRound]={round:nextRound,savedAt:new Date().toISOString(),box:box.map(p=>p.digs.slice()),str:str.map(p=>p.digs.slice())};
+    const keys=Object.keys(store).map(Number).sort((a,b)=>b-a);
+    if(keys.length>30)keys.slice(30).forEach(k=>delete store[k]);
+    lsSet(SK_PRED,store);
+  }
+}
+
+// ── ユーザー操作 ────────────────────────
+function goTab(t){
+  document.querySelectorAll('.pane').forEach(el=>el.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(el=>el.classList.remove('on'));
+  document.getElementById('pane-'+t).classList.add('on');
+  document.getElementById('nav-'+t).classList.add('on');
+  document.getElementById('content').scrollTop=0;
+}
+
+function addResult(){
+  const rEl=document.getElementById('inp-r'),nEl=document.getElementById('inp-n'),errEl=document.getElementById('inp-err');
+  errEl.classList.remove('on');
+  const round=parseInt(rEl.value),num=nEl.value.trim();
+  if(isNaN(round)||round<1){errEl.textContent='回号を正しく入力してください';errEl.classList.add('on');return;}
+  if(!/^\d{4}$/.test(num)){errEl.textContent='4桁の数字で入力してください';errEl.classList.add('on');return;}
+  if(results.some(r=>r.round===round)){errEl.textContent=`第${round}回はすでに登録済みです`;errEl.classList.add('on');return;}
+  const now=new Date();const date=`${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+  const local=loadLocal();local.unshift({round,date,num});lsSet(SK_LOCAL,local.slice(0,MAX));
+  results=merge(results,[{round,date,num}]);refresh();
+  rEl.value='';nEl.value='';
+  const btn=document.getElementById('add-btn');btn.textContent='✓ 追加しました！';
+  setTimeout(()=>btn.textContent='追加して予想を更新',1500);
+}
+
+function delResult(i){
+  if(results.length<=3){alert('最低3件必要です');return;}
+  if(!confirm(`第${results[i].round}回を削除しますか？`))return;
+  const dr=results[i].round;
+  lsSet(SK_LOCAL,loadLocal().filter(r=>r.round!==dr));
+  results=results.filter(r=>r.round!==dr);refresh();
+}
+
+function resetData(){
+  if(!confirm('手動追加データを削除してリセットしますか？'))return;
+  lsSet(SK_LOCAL,[]);results=FALLBACK.map(r=>({...r}));refresh();
+}
+
+function deleteCheck(i){
+  if(!confirm('削除しますか？'))return;
+  const c=loadChecks();c.splice(i,1);lsSet(SK_CHECK,c);renderChecks(c);
+}
+
+function clearChecks(){
+  if(!confirm('全削除しますか？'))return;
+  lsSet(SK_CHECK,[]);renderChecks([]);
+}
+
+function copyNum(num,btn){
+  const orig=btn.innerHTML;const done=ok=>{btn.textContent=ok?'✓ コピー！':num;setTimeout(()=>btn.innerHTML=orig,1800);};
+  if(navigator.clipboard?.writeText){navigator.clipboard.writeText(num).then(()=>done(true)).catch(()=>done(false));}
+  else{const ta=document.createElement('textarea');ta.value=num;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();done(document.execCommand('copy'));document.body.removeChild(ta);}
+}
+
+// ── 起動 ──────────────────────────────
+async function initApp(){
+  results=merge(FALLBACK,loadLocal());refresh();renderChecks(loadChecks());
+  try{
+    const resp=await fetch('./data.json?t='+Date.now());
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const json=await resp.json();
+    const remote=json.results||[];const updated=json.updated||'';
+    results=merge(remote,loadLocal());refresh();
+    if(updated){const s=document.getElementById('hdr-s');s.textContent=s.textContent+` ｜ 更新:${updated}`;}
+    autoReconcile(remote,updated);
+  }catch(e){
+    console.warn('data.json取得失敗:',e.message);
+    setStatus('オフライン – ローカルデータで動作中',false,true);
+  }
+}
+
+initApp();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script>
+</body>
+</html>
