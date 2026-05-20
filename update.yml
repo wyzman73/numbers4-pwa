@@ -1,48 +1,55 @@
-name: Numbers4 毎日自動更新
+name: Numbers4 当選番号自動収集
 
 on:
   schedule:
-    # 月〜金 19:15 JST (= 10:15 UTC) に実行
-    # ナンバーズの抽選は 18:45 JST なので約30分後
+    # ── 月〜金 19:15 JST (= 10:15 UTC)：当日の最新結果を取得
     - cron: "15 10 * * 1-5"
+    # ── 毎週日曜 09:00 JST (= 00:00 UTC)：週次フルスキャン（100件維持）
+    - cron: "0 0 * * 0"
 
-  # 手動実行ボタンも用意（テスト・緊急更新用）
+  # 手動実行（テスト・緊急更新用）
   workflow_dispatch:
+    inputs:
+      full_scan:
+        description: 'フルスキャン（100件取得）を強制実行'
+        required: false
+        default: 'false'
 
 permissions:
-  contents: write   # data.json をコミット・プッシュするために必要
+  contents: write
 
 jobs:
-  update:
+  collect:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. リポジトリをチェックアウト ──────────────────
+      # 1. チェックアウト
       - name: リポジトリをチェックアウト
         uses: actions/checkout@v4
 
-      # ── 2. Python セットアップ ─────────────────────────
+      # 2. Python セットアップ
       - name: Python 3.11 セットアップ
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ── 3. 当選番号取得スクリプトを実行 ───────────────
-      - name: 当選番号を取得して data.json を更新
+      # 3. 当選番号を収集
+      - name: 当選番号を収集して data.json を更新
         run: python fetch_result.py
 
-      # ── 4. 変更があればコミット＆プッシュ ─────────────
-      - name: 変更を確認してコミット
+      # 4. 変更があればコミット＆プッシュ
+      - name: 変更をコミット
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # data.json に変更があった場合のみコミット
           if git diff --quiet data.json; then
             echo "data.json に変更なし。スキップ。"
           else
+            COUNT=$(python3 -c "import json; d=json.load(open('data.json')); print(d.get('count', len(d['results'])))")
+            LATEST=$(python3 -c "import json; d=json.load(open('data.json')); print(d.get('latest', d['results'][0]['round']))")
             git add data.json
-            git commit -m "🎯 Numbers4 データ自動更新 $(date '+%Y-%m-%d %H:%M JST' -d '+9 hours')"
+            git commit -m "🎯 N4自動更新: 第${LATEST}回まで ${COUNT}件 ($(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST'))"
             git push
             echo "✅ data.json をプッシュしました。"
           fi
