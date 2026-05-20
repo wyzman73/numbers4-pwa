@@ -1,1 +1,36 @@
+name: Numbers4 当選番号自動収集
 
+on:
+  schedule:
+    - cron: "15 10 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 当選番号を収集
+        run: python fetch_result.py
+
+      - name: 変更をコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet data.json; then
+            echo "変更なし"
+          else
+            git add data.json
+            git commit -m "N4自動更新 $(TZ=Asia/Tokyo date '+%Y-%m-%d')"
+            git push
+            echo "完了"
+          fi
