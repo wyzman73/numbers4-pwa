@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Numbers4 当選番号自動取得スクリプト
-取得元: みずほ銀行 過去当選番号ページ
-  https://www.mizuhobank.co.jp/takarakuji/check/numbers/backnumber/num{N}.html
-  ページは 20 回ごとに区切られており、Nは開始回号（20の倍数+1）
+Numbers4 当選番号自動収集スクリプト
+取得元（優先順）:
+  1. みずほ銀行 過去当選番号ページ（最大100件）
+     https://www.mizuhobank.co.jp/takarakuji/check/numbers/backnumber/num{N}.html
+  2. フォールバック: numbers4.money-plan.net（直近20件）
 
-実行タイミング:
-  GitHub Actions により月〜金 19:15 JST (= 10:15 UTC) に自動実行
+GitHub Actions にて月〜金 19:15 JST・日曜 09:00 JST に自動実行
 """
 
 import json
@@ -14,96 +14,196 @@ import re
 import sys
 import time
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+# ── 設定 ─────────────────────────────────────────────────────────
 DATA_FILE   = Path(__file__).parent / "data.json"
-BASE_URL    = "https://www.mizuhobank.co.jp/takarakuji/check/numbers/backnumber/num{n}.html"
-MAX_RESULTS = 100   # data.json に保持する最大件数
-FETCH_PAGES = 5     # 初回／不足時に遡るページ数（= 100件）
+MAX_RESULTS = 100
+JST         = timezone(timedelta(hours=9))
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "ja,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "ja-JP,ja;q=0.9",
+    "Cache-Control": "no-cache",
 }
-WEEKDAY_JP = ["月", "火", "水", "木", "金", "土", "日"]
+
+MIZUHO_BASE = (
+    "https://www.mizuhobank.co.jp/takarakuji/check/numbers/backnumber/num{n}.html"
+)
+FALLBACK_URL = "https://numbers4.money-plan.net/"
+
+WEEKDAY_JP = {0:"月",1:"火",2:"水",3:"木",4:"金",5:"土",6:"日"}
 
 
-# ── ページ番号の計算 ──────────────────────────────────────────────
+# ── ユーティリティ ────────────────────────────────────────────────
+def log(msg: str):
+    print(msg, flush=True)
+
+
+def fetch(url: str, timeout: int = 20) -> str | None:
+    req = urllib.request.Request(url, headers=HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            # みずほ銀行は Shift_JIS の場合あり
+            for enc in ("utf-8", "shift_jis", "euc-jp"):
+                try:
+                    return raw.decode(enc)
+                except UnicodeDecodeError:
+                    continue
+            return raw.decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        log(f"    HTTP {e.code}: {url}")
+    except Exception as e:
+        log(f"    エラー: {url} → {e}")
+    return None
+
+
+# ── みずほ銀行ページのパース ──────────────────────────────────────
 def page_start(round_no: int) -> int:
-    """回号から、そのページの開始回号を返す（例: 6971→6961, 6981→6981）"""
+    """回号からそのページの開始回号（20の倍数+1）を計算"""
     return (round_no - 1) // 20 * 20 + 1
 
 
-# ── HTML 取得 ────────────────────────────────────────────────────
-def fetch_page(start_round: int) -> str | None:
-    url = BASE_URL.format(n=start_round)
-    req = urllib.request.Request(url, headers=HEADERS)
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            html = resp.read().decode("utf-8", errors="replace")
-            print(f"    取得: {url} ({len(html):,} bytes)")
-            return html
-    except Exception as e:
-        print(f"    [WARN] {url} 取得失敗: {e}")
-        return None
-
-
-# ── HTML パース ──────────────────────────────────────────────────
-def parse_page(html: str) -> list[dict]:
+def parse_mizuho(html: str) -> list[dict]:
     """
-    みずほ銀行ページのテーブルから回号・日付・N4当選番号を抽出。
-    テーブル例:
-      | 第6961回 | 2026年4月14日(月) | 123 | 4567 |
-    マークダウン変換後はパイプ区切りになるが、
-    raw HTML も想定して両方の正規表現を試みる。
+    みずほ銀行の生HTMLから回号・日付・N4当選番号を抽出。
+
+    HTML構造例（簡略化）:
+      <td>第6961回</td>
+      <td>2026年4月14日</td>  ← 曜日なしの場合あり
+      <td>XXX</td>            ← ナンバーズ3
+      <td>YYYY</td>           ← ナンバーズ4
     """
     results = []
     seen = set()
 
-    # パターン1: Markdown テーブル形式（web_fetch 変換後）
-    # | 第NNNNN回 | YYYY年M月D日 | N3 | N4 |
-    md_pat = re.compile(
-        r"\|\s*第(\d{4,5})回\s*\|\s*(\d{4})年(\d{1,2})月(\d{1,2})日"
-        r"[（(（(]?([月火水木金土日])?[）)）)]?\s*\|\s*\d{3}\s*\|\s*(\d{4})\s*\|"
+    # ── アプローチ1: <td>タグを直接マッチ ──────────────────────
+    # 「第NNNN回」の直後に日付・N3・N4が続くパターン
+    pat1 = re.compile(
+        r"第\s*(\d{4,5})\s*回\D{0,30}?"          # 回号
+        r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日"  # 年月日
+        r"[^<]{0,20}?"                             # 曜日など（任意）
+        r"<[^>]*>\s*(\d{3})\s*</[^>]*>"            # N3 (3桁)
+        r"\s*<[^>]*>\s*(\d{4})\s*</[^>]*>",        # N4 (4桁)
+        re.DOTALL,
     )
-    for m in md_pat.finditer(html):
-        round_no = int(m.group(1))
-        if round_no in seen:
-            continue
-        month    = m.group(3).zfill(2)
-        day      = m.group(4).zfill(2)
-        weekday  = m.group(5) or ""
-        num      = m.group(6)
-        seen.add(round_no)
-        results.append({"round": round_no, "date": f"{month}/{day}{weekday}", "num": num})
+    for m in pat1.finditer(html):
+        _add_result(results, seen, m.group(1), m.group(3), m.group(4), m.group(6))
 
-    # パターン2: raw HTML の <td> 形式（パターン1で取れなかった場合）
+    # ── アプローチ2: テーブル行全体を先に抽出してからパース ───
     if not results:
-        html_pat = re.compile(
-            r"第(\d{4,5})回.*?"
-            r"(\d{4})年(\d{1,2})月(\d{1,2})日[^<]{0,10}([月火水木金土日])"
-            r".*?<td[^>]*>(\d{3})</td>\s*<td[^>]*>(\d{4})</td>",
-            re.DOTALL,
-        )
-        for m in html_pat.finditer(html):
-            round_no = int(m.group(1))
-            if round_no in seen:
+        tr_pat = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
+        td_pat = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL | re.IGNORECASE)
+
+        for tr in tr_pat.finditer(html):
+            row = tr.group(1)
+            cells = [re.sub(r"<[^>]+>", "", c.group(1)).strip()
+                     for c in td_pat.finditer(row)]
+            if len(cells) < 4:
                 continue
-            month   = m.group(3).zfill(2)
-            day     = m.group(4).zfill(2)
-            weekday = m.group(5)
-            num     = m.group(7)
-            seen.add(round_no)
-            results.append({"round": round_no, "date": f"{month}/{day}{weekday}", "num": num})
+            # 第N回 を探す
+            round_match = re.search(r"第\s*(\d{4,5})\s*回", cells[0])
+            if not round_match:
+                continue
+            # 日付を探す
+            date_match = re.search(
+                r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", cells[1]
+            )
+            if not date_match:
+                continue
+            # N4は最後の4桁数字セル
+            n4 = None
+            for cell in reversed(cells):
+                if re.fullmatch(r"\d{4}", cell.strip()):
+                    n4 = cell.strip()
+                    break
+            if n4:
+                _add_result(results, seen,
+                            round_match.group(1),
+                            date_match.group(2),
+                            date_match.group(3),
+                            n4)
+
+    # ── アプローチ3: テキスト行から直接マッチ ─────────────────
+    if not results:
+        # HTMLタグを除去してテキストだけで解析
+        text = re.sub(r"<[^>]+>", " ", html)
+        text = re.sub(r"\s+", " ", text)
+        pat3 = re.compile(
+            r"第\s*(\d{4,5})\s*回\s+"
+            r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*"
+            r"[月火水木金土日（）\(\)]?\s*"
+            r"(\d{3})\s+"      # N3
+            r"(\d{4})"         # N4
+        )
+        for m in pat3.finditer(text):
+            _add_result(results, seen, m.group(1), m.group(3), m.group(4), m.group(6))
 
     return results
 
 
-# ── 既存データ読み込み ────────────────────────────────────────────
+def _add_result(results, seen, round_str, month_str, day_str, num_str):
+    round_no = int(round_str)
+    if round_no in seen:
+        return
+    seen.add(round_no)
+    month = month_str.strip().zfill(2)
+    day   = day_str.strip().zfill(2)
+    results.append({"round": round_no, "date": f"{month}/{day}", "num": num_str.strip()})
+
+
+# ── フォールバック: numbers4.money-plan.net ───────────────────────
+def parse_fallback(html: str) -> list[dict]:
+    """
+    numbers4.money-plan.net の HTML から抽出。
+    複数の正規表現パターンを試みる。
+    """
+    results = []
+    seen = set()
+
+    # パターンA: 「第NNNN回」に続く4桁数字
+    pats = [
+        # テーブルセル形式
+        re.compile(
+            r"第(\d{4,5})回[^\d]{5,60}?"
+            r"(\d{4})年(\d{1,2})月(\d{1,2})日[^<]{0,15}([月火水木金土日])[^<]{0,5}"
+            r".*?[^\d](\d{4})[^\d]",
+            re.DOTALL,
+        ),
+        # シンプル形式
+        re.compile(
+            r"第(\d{4,5})回[^\d]{0,100}?(\d{4})[^\d]",
+            re.DOTALL,
+        ),
+    ]
+
+    for pat in pats:
+        if results:
+            break
+        for m in pat.finditer(html):
+            rnd = int(m.group(1))
+            if rnd in seen:
+                continue
+            # グループ数によって num を取得
+            num = m.group(m.lastindex)
+            if re.fullmatch(r"\d{4}", num):
+                seen.add(rnd)
+                results.append({"round": rnd, "date": "—", "num": num})
+                if len(results) >= 30:
+                    break
+
+    return results
+
+
+# ── 既存データ ────────────────────────────────────────────────────
 def load_existing() -> dict:
     if DATA_FILE.exists():
         try:
@@ -115,96 +215,96 @@ def load_existing() -> dict:
 
 # ── メイン ───────────────────────────────────────────────────────
 def main():
-    jst   = timezone(timedelta(hours=9))
-    today = datetime.now(tz=jst).strftime("%Y-%m-%d")
-    print(f"[{today}] Numbers4 当選番号自動収集開始")
+    today = datetime.now(tz=JST).strftime("%Y-%m-%d")
+    log(f"[{today}] Numbers4 当選番号自動収集 開始")
 
-    existing_data    = load_existing()
-    existing_results = existing_data.get("results", [])
-    existing_rounds  = {r["round"] for r in existing_results}
-    print(f"  既存データ: {len(existing_results)} 件")
+    existing = load_existing()
+    ex_results = existing.get("results", [])
+    ex_rounds  = {r["round"] for r in ex_results}
+    log(f"  既存: {len(ex_results)} 件 / 最新既知: 第{max(ex_rounds, default=0)}回")
 
-    # ── 最新回号の推定 ──────────────────────────────────────────
-    # 既存データの最大回号、または今日の日付から概算
-    if existing_results:
-        latest_known = max(r["round"] for r in existing_results)
+    # ── 最新回号の推定 ───────────────────────────────────────────
+    if ex_rounds:
+        latest_known = max(ex_rounds)
     else:
-        # 第1回: 1994年10月7日 → 約7,000回程度（週5×約30年）
-        base_date  = datetime(1994, 10, 7, tzinfo=jst)
-        days_since = (datetime.now(tz=jst) - base_date).days
-        weekdays   = int(days_since * 5 / 7)
-        latest_known = max(6900, weekdays)
+        base = datetime(1994, 10, 7, tzinfo=JST)
+        days = (datetime.now(tz=JST) - base).days
+        latest_known = max(6900, int(days * 5 / 7))
 
-    print(f"  最新既知回号: 第{latest_known}回")
+    # ── みずほ銀行ページを取得 ────────────────────────────────────
+    fetched_map: dict[int, dict] = {}
 
-    # ── 取得するページを決定 ─────────────────────────────────────
-    # 最新ページから FETCH_PAGES ページ分を取得
-    latest_page_start = page_start(latest_known)
-    pages_to_fetch = []
-    p = latest_page_start
-    for _ in range(FETCH_PAGES):
-        if p >= 1:
-            pages_to_fetch.append(p)
-        p -= 20
+    # 現在のページ + 不足分のページ数を計算
+    pages_needed = max(5, (MAX_RESULTS - len(ex_results)) // 20 + 2)
+    latest_ps = page_start(latest_known)
 
-    # 既存データが少ない場合はさらに遡る
-    if len(existing_results) < MAX_RESULTS:
-        extra_needed = (MAX_RESULTS - len(existing_results)) // 20 + 1
-        for i in range(len(pages_to_fetch), len(pages_to_fetch) + extra_needed):
-            next_p = latest_page_start - i * 20
-            if next_p >= 1:
-                pages_to_fetch.append(next_p)
+    pages = [latest_ps - i * 20 for i in range(pages_needed) if latest_ps - i * 20 >= 1]
+    log(f"  取得予定ページ: {pages[:5]}{'...' if len(pages)>5 else ''} ({len(pages)}ページ)")
 
-    print(f"  取得ページ: {pages_to_fetch}")
-
-    # ── ページ取得・パース ───────────────────────────────────────
-    fetched_map = {}
-    for start in pages_to_fetch:
-        html = fetch_page(start)
+    mizuho_ok = False
+    for i, ps in enumerate(pages):
+        url = MIZUHO_BASE.format(n=ps)
+        html = fetch(url)
         if html:
-            parsed = parse_page(html)
-            print(f"    → {len(parsed)} 件パース")
+            parsed = parse_mizuho(html)
+            log(f"    num{ps}.html → {len(parsed)} 件パース")
+            if parsed:
+                mizuho_ok = True
+                for r in parsed:
+                    fetched_map[r["round"]] = r
+        # 最初の5ページは1秒待ち、それ以降は0.5秒
+        time.sleep(1.0 if i < 5 else 0.5)
+
+        # 100件集まったら打ち切り
+        if len(fetched_map) >= MAX_RESULTS:
+            break
+
+    log(f"  みずほ銀行: {len(fetched_map)} 件取得")
+
+    # ── フォールバック ────────────────────────────────────────────
+    if not mizuho_ok or len(fetched_map) < 5:
+        log("  フォールバック: numbers4.money-plan.net を試みます")
+        html = fetch(FALLBACK_URL)
+        if html:
+            parsed = parse_fallback(html)
+            log(f"    フォールバック → {len(parsed)} 件パース")
             for r in parsed:
-                fetched_map[r["round"]] = r
-        time.sleep(1.0)   # サーバー負荷軽減
+                if r["round"] not in fetched_map:
+                    fetched_map[r["round"]] = r
 
-    # ── マージ ───────────────────────────────────────────────────
-    combined = {r["round"]: r for r in existing_results}
-    combined.update(fetched_map)   # 新規で上書き
-    merged = sorted(combined.values(), key=lambda r: r["round"], reverse=True)
-    merged = merged[:MAX_RESULTS]
-
-    new_count = len(fetched_map) - len(existing_rounds & fetched_map.keys())
-    print(f"  新規取得: {new_count} 件 / 合計: {len(merged)} 件")
-
-    if not merged:
-        print("  [WARN] データが取得できませんでした。既存データを維持します。")
+    if not fetched_map:
+        log("  [WARN] いずれのソースからも取得できませんでした。既存データを維持します。")
+        # 日付だけ更新してコミットをスキップ
         sys.exit(0)
 
-    latest_round = merged[0]["round"]
-    print(f"  最新回号: 第{latest_round}回 ({merged[0]['num']})")
+    # ── マージ ────────────────────────────────────────────────────
+    combined = {r["round"]: r for r in ex_results}
+    combined.update(fetched_map)
+    merged = sorted(combined.values(), key=lambda r: r["round"], reverse=True)[:MAX_RESULTS]
 
-    # ── 変更確認 ─────────────────────────────────────────────────
-    if (
-        existing_data.get("updated") == today
-        and len(existing_results) == len(merged)
-        and existing_results == merged
-    ):
-        print("  変更なし。スキップ。")
+    new_cnt = len({r for r in fetched_map if r not in ex_rounds})
+    latest_r = merged[0]["round"]
+    latest_n = merged[0]["num"]
+    log(f"  新規: {new_cnt} 件 / 合計: {len(merged)} 件 / 最新: 第{latest_r}回 {latest_n}")
+
+    # ── 変更チェック ─────────────────────────────────────────────
+    if (existing.get("updated") == today
+            and len(ex_results) == len(merged)
+            and ex_results[:5] == merged[:5]):
+        log("  変更なし。スキップ。")
         sys.exit(0)
 
     # ── 書き出し ─────────────────────────────────────────────────
-    output = {
+    out = {
         "updated": today,
         "count":   len(merged),
-        "latest":  latest_round,
+        "latest":  latest_r,
         "results": merged,
     }
     DATA_FILE.write_text(
-        json.dumps(output, ensure_ascii=False, indent=2),
-        encoding="utf-8",
+        json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(f"  ✅ data.json を更新しました（{len(merged)} 件）")
+    log(f"  ✅ data.json 更新完了: {len(merged)} 件")
 
 
 if __name__ == "__main__":

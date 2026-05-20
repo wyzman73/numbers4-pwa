@@ -2,18 +2,13 @@ name: Numbers4 当選番号自動収集
 
 on:
   schedule:
-    # ── 月〜金 19:15 JST (= 10:15 UTC)：当日の最新結果を取得
+    # 月〜金 19:15 JST (= 10:15 UTC)
     - cron: "15 10 * * 1-5"
-    # ── 毎週日曜 09:00 JST (= 00:00 UTC)：週次フルスキャン（100件維持）
+    # 毎週日曜 09:00 JST (= 00:00 UTC) 週次フルスキャン
     - cron: "0 0 * * 0"
 
-  # 手動実行（テスト・緊急更新用）
+  # ★ 手動実行ボタン（初回テスト・デバッグ用）
   workflow_dispatch:
-    inputs:
-      full_scan:
-        description: 'フルスキャン（100件取得）を強制実行'
-        required: false
-        default: 'false'
 
 permissions:
   contents: write
@@ -21,35 +16,56 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-      # 1. チェックアウト
-      - name: リポジトリをチェックアウト
+      - name: チェックアウト
         uses: actions/checkout@v4
 
-      # 2. Python セットアップ
       - name: Python 3.11 セットアップ
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3. 当選番号を収集
-      - name: 当選番号を収集して data.json を更新
-        run: python fetch_result.py
+      - name: 当選番号を収集
+        run: |
+          echo "=== fetch_result.py 実行 ==="
+          python fetch_result.py
+          echo "=== 実行完了 ==="
 
-      # 4. 変更があればコミット＆プッシュ
-      - name: 変更をコミット
+      - name: data.json の内容を確認（デバッグ用）
+        run: |
+          echo "--- data.json の先頭 ---"
+          head -20 data.json || echo "(ファイルなし)"
+
+      - name: 変更をコミット＆プッシュ
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          git diff --stat data.json
+
           if git diff --quiet data.json; then
-            echo "data.json に変更なし。スキップ。"
+            echo "data.json に変更なし。コミットをスキップ。"
           else
-            COUNT=$(python3 -c "import json; d=json.load(open('data.json')); print(d.get('count', len(d['results'])))")
-            LATEST=$(python3 -c "import json; d=json.load(open('data.json')); print(d.get('latest', d['results'][0]['round']))")
+            COUNT=$(python3 -c "
+import json, sys
+try:
+  d = json.load(open('data.json'))
+  print(d.get('count', len(d.get('results', []))))
+except:
+  print('?')
+")
+            LATEST=$(python3 -c "
+import json, sys
+try:
+  d = json.load(open('data.json'))
+  print(d.get('latest', d['results'][0]['round']))
+except:
+  print('?')
+")
             git add data.json
-            git commit -m "🎯 N4自動更新: 第${LATEST}回まで ${COUNT}件 ($(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST'))"
+            git commit -m "🎯 N4自動更新: 第${LATEST}回まで ${COUNT}件 ($(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M')JST)"
             git push
-            echo "✅ data.json をプッシュしました。"
+            echo "✅ プッシュ完了"
           fi
