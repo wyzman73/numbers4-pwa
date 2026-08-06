@@ -1,8 +1,18 @@
 {
-  "updated": "2026-08-05",
-  "count": 71,
-  "latest": 7041,
+  "updated": "2026-08-06",
+  "count": 73,
+  "latest": 7043,
   "results": [
+    {
+      "round": 7043,
+      "date": "08/06",
+      "num": "8835"
+    },
+    {
+      "round": 7042,
+      "date": "08/05",
+      "num": "4570"
+    },
     {
       "round": 7041,
       "date": "08/04",
